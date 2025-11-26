@@ -1,0 +1,50 @@
+# harness.io/skip-file-for-deploy
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: "{{ .Values.name }}-{{ .Values.environment}}-{{ .Values.datacenter }}-certs"
+  namespace: "{{ .Values.namespace }}"
+  annotations:
+    "field.cattle.io/projectId": "{{ .Values.projectId }}"
+spec:
+  secretName: "{{ .Values.name }}-{{ .Values.environment }}-{{ .Values.datacenter }}-certs"
+  duration: 8760h # 1y
+  renewBefore: 720h # 30d
+  subject:
+    countries:
+      - "US"
+    provinces:
+      - "Ohio"
+    localities:
+      - "Cincinnati"
+    organizations:
+      - "The Kroger Co."
+    organizationalUnits:
+      - "Associate Technology"
+  {{ if eq .Values.environment "prod" }}
+  commonName: "kewm.kroger.com"
+  {{ else if eq .Values.environment "dev" "test" "stage" "perf" }}
+  commonName: "{{.Values.serverAlias}}"
+  {{ else }}
+  commonName: "*.kewm.rch-{{ .Values.datacenter }}-axnonprod.kroger.com"
+  {{ end }}
+  dnsNames:
+    {{ if eq .Values.environment "prod" }}
+  - "kewm.kroger.com"
+  - "kewm.cloudha.kroger.com"
+  - "*.kewm.rch-{{ .Values.datacenter }}-axprod.kroger.com"
+    {{ else if eq .Values.environment "stage" }}
+  - "kewmstage.kroger.com"
+  - "kewmstage.cloudha.kroger.com"
+  - "*.kewm.rch-{{ .Values.datacenter }}-axnonprod.kroger.com"
+    {{ else if eq .Values.environment "dev" "test" "perf" }}
+  - "kewm{{ .Values.environment }}.kroger.com"
+  - "kewm{{ .Values.environment }}.cloudhanp.kroger.com"
+  - "*.kewm.rch-{{ .Values.datacenter }}-axnonprod.kroger.com"
+    {{ else }}
+  - "*.kewm.rch-{{ .Values.datacenter }}-axnonprod.kroger.com"
+    {{ end }}
+  issuerRef:
+    name: krogerissuer
+    kind: KrogerIssuer
+    group: certs

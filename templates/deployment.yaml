@@ -1,0 +1,140 @@
+{{- if .Values.env.config }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{.Values.name}}
+  annotations:
+    harness.io/skip-versioning: "true"
+  labels:
+    app: {{ $.Values.name }}
+    {{ if ne $.Values.environment "prod" }}
+    environment: {{$.Values.environment}}
+    {{ end }}
+data:
+{{ .Values.env.config | toYaml | indent 2}}
+  "env.tenantsAvailable": {{ keys .Values.env.tenantsAvailable | join "," }}
+  "kewm-multitenancy.tenantsAvailable": {{ keys .Values.env.tenantsAvailable | join "," }}
+---
+{{- end}}
+
+{{- if .Values.env.secrets}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{.Values.name}}
+  annotations:
+    harness.io/skip-versioning: "true"
+stringData:
+{{.Values.env.secrets | toYaml | indent 2}}
+---
+{{- end}}
+
+{{- if .Values.dockercfg}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{.Values.name}}-dockercfg
+  annotations:
+    harness.io/skip-versioning: "true"
+data:
+  .dockercfg: {{.Values.dockercfg}}
+type: kubernetes.io/dockercfg
+---
+{{- end}}
+
+
+{{- range $tenantKey, $tenant := .Values.env.tenantsAvailable }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tenant-{{ $tenant.distributionCenter }}-config
+  annotations:
+    harness.io/skip-versioning: "true"
+  labels:
+    tenant: {{ $tenantKey | quote }}
+    {{ if ne $.Values.environment "prod" }}
+    environment: {{$.Values.environment}}
+    {{ end }}
+data:
+  "kewm.tenant": {{ $tenant.tenantId | upper }}
+  "kewm-multitenancy.tenantsAvailable": {{ $tenantKey }} # this requires prefix values
+  "kewm-wms.url": http://svc-{{ $tenant.distributionCenter }}-kewm-wms-service/ # this requires distribution center
+  "kewm-event.url": http://svc-{{ $tenant.distributionCenter }}-kewm-event-service/ # this requires distribution center
+  "kewm-batch.url": http://svc-{{ $tenant.distributionCenter }}-kewm-batch-service/ # this requires distribution center
+  "kewm-report.url": http://svc-{{ $tenant.distributionCenter }}-kewm-reports-service/ # this requires distribution center
+---
+{{- end }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{.Values.name}}-deployment
+  labels:
+    app: {{.Values.name}}
+    {{ if ne .Values.environment "prod" }}
+    environment: {{.Values.environment}}
+    {{ end }}
+spec:
+  replicas: {{int .Values.replicas}}
+  selector:
+    matchLabels:
+      app: {{.Values.name}}
+      {{ if ne .Values.environment "prod" }}
+      environment: {{.Values.environment}}
+      {{ end }}
+  template:
+    metadata:
+      labels:
+        app: {{.Values.name}}
+        {{ if ne .Values.environment "prod" }}
+        environment: {{.Values.environment}}
+        {{ end }}
+    spec:
+      {{- if .Values.dockercfg}}
+      imagePullSecrets:
+      - name: {{.Values.name}}-dockercfg
+      {{- end}}
+      containers:
+      - name: {{.Values.name}}
+        image: {{.Values.image}}
+        imagePullPolicy: IfNotPresent
+        {{- if or .Values.env.config .Values.env.secrets}}
+        envFrom:
+        {{- if .Values.env.config}}
+        - configMapRef:
+            name: {{.Values.name}}
+        {{- end}}
+        {{- if .Values.env.secrets}}
+        - secretRef:
+            name: {{.Values.name}}
+        {{- end}}
+        {{- end}}
+        startupProbe:
+          httpGet:
+            path: {{ .Values.deployment.startupProbe.endpoint }}
+            port: {{ .Values.deployment.httpPort }}
+          initialDelaySeconds: {{ .Values.deployment.startupProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.deployment.startupProbe.periodSeconds }}
+          failureThreshold: {{ .Values.deployment.startupProbe.failureThreshold }}
+          timeoutSeconds: {{ .Values.deployment.startupProbe.timeoutSeconds }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.deployment.readinessProbe.endpoint }}
+            port: {{ .Values.deployment.httpPort }}
+          initialDelaySeconds: {{ .Values.deployment.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.deployment.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.deployment.readinessProbe.failureThreshold }}
+          timeoutSeconds: {{ .Values.deployment.readinessProbe.timeoutSeconds }}
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sh", "-c", "sleep 10"]
+        resources:
+          limits:
+#            cpu: {{ $.Values.deployment.resources.limits.cpu }}
+            memory: {{ $.Values.deployment.resources.limits.memory }}
+          requests:
+            cpu: {{ $.Values.deployment.resources.requests.cpu }}
+#            memory: {{ $.Values.deployment.resources.requests.memory }}
+      terminationGracePeriodSeconds: {{ $.Values.deployment.terminationGracePeriodSeconds }}
+  
