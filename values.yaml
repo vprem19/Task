@@ -1,0 +1,53 @@
+name: kewm
+replicas: <+serviceVariables.replicas>
+
+datacenter: <+env.variables.datacenter>
+environment: <+env.variables.environment>
+
+image: <+artifact.image>
+dockercfg: <+artifact.imagePullSecret>
+
+createNamespace: true
+namespace: <+infra.namespace>
+
+projectId: <+env.variables.rancherProjectID>
+
+# Service Type allow you to specify what kind of service you want.
+# Possible values for ServiceType are:
+# ClusterIP | NodePort | LoadBalancer | ExternalName
+serviceType: ClusterIP
+
+# A Service can map an incoming port to any targetPort.
+# targetPort is where application is listening on inside the container.
+servicePort: 80
+serviceTargetPort: 8080
+
+serverAlias: <+serviceVariables.serviceName><+env.variables.environment>.<+env.variables.vanitySuffix>
+
+ingress:
+  host: <+serviceVariables.serviceName>-<+env.variables.environment>.<+env.variables.ingressSuffix>
+  stageHost: <+serviceVariables.serviceName>-<+env.variables.environment>-secondary.<+env.variables.ingressSuffix>
+  secret: <+env.variables.ingressSecret>
+
+deployment:
+  httpPort: 8080
+  startupProbe:
+    endpoint: /manage/health
+    initialDelaySeconds: 5
+    timeoutSeconds: 5
+    periodSeconds: 10
+    failureThreshold: 6
+  readinessProbe:
+    endpoint: /manage/health
+    initialDelaySeconds: 5
+    timeoutSeconds: 5
+    periodSeconds: 10
+    failureThreshold: 6
+  resources:
+    limits:
+      cpu: .5
+      memory: 3Gi
+    requests:
+      cpu: .5
+      memory: 3Gi
+  terminationGracePeriodSeconds: 60  # this is the length of time before SIGKILL is sent
