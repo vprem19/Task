@@ -12,35 +12,21 @@ metadata:
     nginx.ingress.kubernetes.io/session-cookie-name: "route"
     nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
     nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+    nginx.ingress.kubernetes.io/server-alias: {{ include "kewm.ingressServerAlias" . }}
     namespace: {{ .Values.namespace }}
-    {{ if eq .Values.environment "prod" }}
-    nginx.ingress.kubernetes.io/server-alias: "kewm.kroger.com,kewm.cloudha.kroger.com"
-    {{ else }}
-    nginx.ingress.kubernetes.io/server-alias: {{.Values.serverAlias}},{{.Values.name}}{{.Values.environment}}.kroger.com
-    {{ end }}
 spec:
   tls:
-  - hosts:
-      {{ if eq .Values.environment "prod" }}
-      - kewm.kroger.com
-      - kewm.kewm.rch-{{ .Values.datacenter }}-axprod.kroger.com
-      {{ else }}
-      - kewm{{ .Values.environment }}.kroger.com
-      - {{ .Values.ingress.host }}
-      {{ end }}
-    secretName: {{.Values.ingress.secret}}
-  rules:
-  {{ if eq .Values.environment "prod" }}
-  - host: kewm.kewm.rch-{{ .Values.datacenter }}-axprod.kroger.com
-  {{ else }}
-  - host: {{ .Values.ingress.host }}
-  {{ end }}
+    - hosts:
+  {{ include "kewm.ingressTlsHosts" . | indent 8 }}
+secretName: {{ .Values.ingress.secret }}
+rules:
+  - host: {{ include "kewm.ingressRuleHost" . }}
     http:
       paths:
-      - path: /
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: svc-{{ .Values.name }}
-            port:
-              number: {{ .Values.servicePort }}
+        - path: /
+          pathType: ImplementationSpecific
+          backend:
+            service:
+              name: svc-{{ .Values.name }}
+              port:
+                number: {{ .Values.servicePort }}
